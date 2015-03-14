@@ -1,25 +1,197 @@
 ---
-title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
-    keep_md: true
+title: "Reproducible Research - Peer Assessment 1"
+output: html_document
 ---
-
 
 ## Loading and preprocessing the data
 
+```{r DataPrep}
+library(ggplot2)
+library(pander)
+
+# read the csv file
+AC <- read.csv("Activity.csv")
+
+# calculate the total steps per day
+AC.sum <- aggregate(formula=steps~date, data=AC, FUN=sum, na.action = na.omit)
+colnames(AC.sum)[colnames(AC.sum)=="steps"] <- "Total.Steps"
+
+## calculate the mean steps per day
+AC.mean <- aggregate(formula=steps~date, data=AC, FUN=mean, na.action = na.omit)
+colnames(AC.mean)[colnames(AC.mean)=="steps"] <- "Mean.Steps"
+
+# calculate the medians steps per day
+AC.median <- aggregate(formula=steps~date, data=AC, FUN=median, na.action = na.omit)
+colnames(AC.median)[colnames(AC.median)=="steps"] <- "Median.Steps"
+
+# merge Total, Mean, Median tables together
+AC.all <- merge(AC.sum, AC.mean, by="date", all=TRUE)
+AC.all <- merge(AC.all, AC.median, by="date", all=TRUE)
+
+# calculate the mean of 5 min interval across all days.
+AC.5min <- aggregate(formula=steps~interval, data=AC, FUN=mean, na.action = na.omit)
+colnames(AC.5min)[colnames(AC.5min)=="steps"] <- "mean.5min.steps"
 
 
-## What is mean total number of steps taken per day?
 
+```
 
+## Total, Mean, and Median number of steps taken per day
 
-## What is the average daily activity pattern?
+```{r AllTable, echo=TRUE, results='asis'}
+# print table
+pandoc.table(AC.all, justify = "left", split.tables = Inf)
+```
 
+## Histogram of Total Number of Steps Taken Each Day
 
+```{r Hist, echo=TRUE, results='asis'}
+# create a histogram per day
+g <- ggplot(AC.sum, aes(AC.sum$Total.Steps))
+g <- g + geom_histogram(color="white")
+g <- g + ggtitle("Histogram of Total Number of Steps Taken Each Day") 
+g <- g + xlab("Total Number of Steps") + ylab("Frequency")
+g <- g + theme_bw()
+g <- g +  theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5), title=element_text(size=9))
+print(g)
+rm(g) 
+```
 
-## Imputing missing values
+#Line Chart of average daily activity pattern per 5 min interval
+Time Series plot (i.e. type = "l") of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all days (y-axis)
+```{r, echo=TRUE, results='asis'}
+# plot Cumulative Count per day
+g <- ggplot(AC.5min, aes(AC.5min$interval, AC.5min$mean.5min.steps)) 
+g <- g + geom_line(color="blue", linetype=1, size=1) 
+g <- g + ggtitle("Time series plot of 5-min interval & average num steps across all days") 
+g <- g + xlab("5 minute interval") 
+g <- g + ylab("Average Number of Steps")
+g <- g + theme_bw()
+g <- g + scale_x_continuous(breaks = round(seq(min(AC.5min$interval), max(AC.5min$interval), by = 100),1))
+g <- g +  theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5), title=element_text(size=11)) # vertical x aXIS TEXT
+print(g)
+```
 
+# Max Steps in 5 min interval
+Which 5-minute interval, on average across all the days in the dataset, contains the maximum number of steps?
+```{r, echo=TRUE, results='asis'}
+max.5min <- max(AC.5min$mean.5min.steps)
+print(max.5min)
+```
 
+# Imputing missing values
+1.Calculate and report the total number of missing values in the dataset (i.e. the total number of rows with NAs)
+
+```{r, echo=TRUE, results='asis'}
+AC.steps.na <- subset(AC, is.na(steps) )
+AC.date.na <- subset(AC, is.na(date) )
+AC.interval.na <- subset(AC, is.na(interval) )
+AC.anyrow.na <- subset(AC, is.na(steps) | is.na(date) | is.na(interval))
+missing.values <- data.frame(Total.number.of.rows=nrow(AC),
+                            Missing.steps.values=nrow(AC.steps.na),
+                            Missing.date.values=nrow(AC.date.na),
+                            Missing.interval.values=nrow(AC.interval.na),
+                            Rows.with.missing.values=nrow(AC.anyrow.na)
+                            )
+# print table
+pandoc.table(t(missing.values), justify = "left", split.tables = Inf)
+
+rm(missing.values)
+
+```
+
+# Imputing missing values
+2.Strategy for filling in all of the missing values in the dataset. 
+
+My strategy: replace the NAs in the dataset with the mean of the 5 min interval across all days.
+
+```{r, echo=TRUE, results='asis'}
+# merge the mean for 5min interval columns with the main data set
+AC.clean <- merge(AC, AC.5min, by="interval", all=TRUE)
+AC.clean$steps[is.na(AC.clean$steps)] <- AC.clean$mean.5min.steps[is.na(AC.clean$steps)]
+
+# print again to make sure that no NAs are left in the data set
+AC.clean.steps.na <- subset(AC.clean, is.na(steps) )
+AC.clean.date.na <- subset(AC.clean, is.na(date) )
+AC.clean.interval.na <- subset(AC.clean, is.na(interval) )
+AC.clean.anyrow.na <- subset(AC.clean, is.na(steps) | is.na(date) | is.na(interval))
+missing.values <- data.frame(Total.number.of.rows=nrow(AC.clean),
+                            Missing.steps.values=nrow(AC.clean.steps.na),
+                            Missing.date.values=nrow(AC.clean.date.na),
+                            Missing.interval.values=nrow(AC.clean.interval.na),
+                            Rows.with.missing.values=nrow(AC.clean.anyrow.na)
+                            )
+# print table
+pandoc.table(t(missing.values), justify = "left", split.tables = Inf)
+
+```
+
+## Total, Mean, and Median number of steps taken per day for the CLEAN data set compared to the ORIGINAL data set
+Notice that the clean data set does not have any NAs, and that the NA values in the original data set are now replaced with actual values in the clean data set.
+
+```{r DataPrepClean, echo=TRUE, results='asis'}
+# calculate the total steps per day
+AC.clean.sum <- aggregate(formula=steps~date, data=AC.clean, FUN=sum, na.action = na.omit)
+colnames(AC.clean.sum)[colnames(AC.clean.sum)=="steps"] <- "clean.Total.Steps"
+
+## calculate the mean steps per day
+AC.clean.mean <- aggregate(formula=steps~date, data=AC.clean, FUN=mean, na.action = na.omit)
+colnames(AC.clean.mean)[colnames(AC.clean.mean)=="steps"] <- "clean.Mean.Steps"
+
+# calculate the medians steps per day
+AC.clean.median <- aggregate(formula=steps~date, data=AC.clean, FUN=median, na.action = na.omit)
+colnames(AC.clean.median)[colnames(AC.clean.median)=="steps"] <- "clean.Median.Steps"
+
+# merge Total, Mean, Median tables together
+AC.clean.all <- merge(AC.clean.sum, AC.clean.mean, by="date", all=TRUE)
+AC.clean.all <- merge(AC.clean.all, AC.clean.median, by="date", all=TRUE)
+
+# merge with original data set to show the difference
+AC.clean.all <- merge(AC.clean.all, AC.all, by=c("date"), all=TRUE)
+
+# print the table to compare clean vs. original ordering the columns to have totals/mean/median next to each other.
+pandoc.table(AC.clean.all[,c(1,2,5,3,6,4,7)], justify = "left", split.tables = Inf)
+```
+
+## Histogram of Total Number of Steps Taken Each Day for the CLEAN data set
+
+```{r , echo=TRUE, results='asis'}
+# create a histogram per day
+g <- ggplot(AC.clean.sum, aes(AC.clean.sum$clean.Total.Steps))
+g <- g + geom_histogram(color="white")
+g <- g + ggtitle("Histogram of Total Number of Steps Taken Each Day") 
+g <- g + xlab("Total Number of Steps") + ylab("Frequency")
+g <- g + theme_bw()
+g <- g +  theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5), title=element_text(size=9))
+print(g)
+rm(g) 
+```
 
 ## Are there differences in activity patterns between weekdays and weekends?
+
+```{r , echo=TRUE, results='asis'}
+# add the weekday or weekend flag
+AC$day <- weekdays(as.Date(AC$date))
+AC$dayType <- ifelse(AC$day=="Saturday" | AC$day=="Sunday", "Weekend", "Weekday")
+AC$dayType <- as.factor(AC$dayType)
+
+# calculate average steps for weekday and weeekend for each 5 min interval
+AC.dayType <- aggregate(formula=steps~interval+dayType, data=AC, FUN=mean)
+
+```
+
+# Plot 5 min interval for Weekdays and Weekends
+
+```{r , echo=TRUE, results='asis'}
+# plot Cumulative Count per day
+g <- ggplot(AC.dayType, aes(AC.dayType$interval, AC.dayType$steps)) 
+g <- g + geom_line(color="blue", linetype=1, size=1) 
+g <- g + facet_grid( dayType~.)
+g <- g + ggtitle("Time series plot of 5-min interval & average num steps across day type") 
+g <- g + xlab("5 minute interval") 
+g <- g + ylab("Average Number of Steps")
+g <- g + theme_bw()
+g <- g + scale_x_continuous(breaks = round(seq(min(AC.5min$interval), max(AC.5min$interval), by = 100),1))
+g <- g +  theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5), title=element_text(size=11)) # vertical x aXIS TEXT
+print(g)
+```
